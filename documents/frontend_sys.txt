@@ -1,0 +1,37 @@
+frontend/
+├─ package.json
+├─ tsconfig.json
+├─ vite.config.ts
+├─ tailwind.config.cjs
+├─ postcss.config.cjs
+├─ src/
+│  ├─ main.tsx
+│  ├─ App.tsx
+│  ├─ index.css
+│  ├─ api/
+│  │  └─ client.ts
+│  ├─ hooks/
+│  │  ├─ useAuth.ts
+│  │  └─ useToast.ts
+│  ├─ pages/
+│  │  ├─ Home.tsx
+│  │  ├─ Login.tsx
+│  │  ├─ Register.tsx
+│  │  ├─ Recipes/
+│  │  │  ├─ RecipeList.tsx
+│  │  │  ├─ RecipeView.tsx
+│  │  │  └─ RecipeForm.tsx
+│  │  ├─ Inventory.tsx
+│  │  └─ ShoppingLists/
+│  │     ├─ Generate.tsx
+│  │     └─ ShoppingListView.tsx
+│  ├─ components/
+│  │  ├─ Layout.tsx
+│  │  ├─ Nav.tsx
+│  │  ├─ ProtectedRoute.tsx
+│  │  ├─ Input.tsx
+│  │  ├─ Button.tsx
+│  │  └─ Toast.tsx
+│  └─ types/
+│     └─ index.ts
+└─ README.md

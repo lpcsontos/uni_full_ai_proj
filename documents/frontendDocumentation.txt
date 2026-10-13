@@ -1,0 +1,185 @@
+Frontend Documentation
+A concise, practical reference for the frontend of RecipeMgr. It explains purpose, how to run and develop locally, project layout, key files and components, API integration, state and routing conventions, testing, deployment, and common troubleshooting steps.
+
+Quick start and local development
+Purpose The frontend is a single‑page React app (Vite) that consumes the backend API under /api, handles authentication with access tokens, and provides UI for recipes, inventory, and shopping lists.
+
+Prerequisites
+
+Node.js 18+ and npm or pnpm.
+
+Backend running and reachable (default http://127.0.0.1:8080/api).
+
+Install and run
+
+bash
+# install dependencies
+npm install
+
+# start dev server
+npm run dev
+
+# build for production
+npm run build
+
+# preview production build locally
+npm run preview
+Environment
+
+Vite env prefix: VITE_
+
+Common env:
+
+VITE_API_BASE — base API URL, default http://127.0.0.1:8080/api Set env values in .env or your shell before running dev/build.
+
+Project structure and key files
+Top-level layout
+
+Kód
+src/
+  api/
+    client.ts           # axios client, auth header handling
+  pages/
+    Recipes/
+      RecipeList.tsx
+      RecipeView.tsx
+      RecipeForm.tsx
+    Inventory.tsx
+    ShoppingLists/
+      Generate.tsx
+      ShoppingListView.tsx
+  utils/
+    responseHelpers.ts  # normalizers for backend PascalCase -> frontend
+  main.tsx              # app bootstrap, router
+  App.tsx               # route definitions
+Key files and responsibilities
+
+src/api/client.ts — central axios instance; sets Authorization header from localStorage and withCredentials for refresh cookie. Edit here to change base URL or auth behavior.
+
+src/utils/responseHelpers.ts — maps backend PascalCase fields (ID, Title, Ingredients) to frontend-friendly keys. Use these helpers when consuming API responses.
+
+src/pages/* — page components. Each page fetches data, normalizes responses, and renders UI. Prefer re-fetching lists after writes to keep UI authoritative.
+
+src/main.tsx — mounts React, global error overlay (recommended for dev), and router.
+
+Development workflow and scripts
+Common scripts
+
+npm run dev — start Vite dev server (hot reload).
+
+npm run build — produce production bundle.
+
+npm run preview — serve the production build locally.
+
+npm test — run unit tests (if present).
+
+Recommended dev flow
+
+Start backend and frontend (npm run dev).
+
+Open browser DevTools → Console and Network. Watch API responses and console.log outputs from pages.
+
+When adding or changing API mappings, add console.log("raw:", res.data) to inspect shapes. Use responseHelpers to normalize.
+
+After POST/PUT operations, either navigate to the created resource (if id returned) or re-fetch the list to update UI.
+
+API integration and response normalization
+Base URL
+
+Default: http://127.0.0.1:8080/api (set VITE_API_BASE to override).
+
+Auth flow
+
+Login returns { "access_token": "<jwt>" } and sets a refresh cookie.
+
+Client behavior: store access_token in localStorage and let api/client.ts attach Authorization: Bearer <token> to protected requests.
+
+Normalization rules
+
+Backend uses PascalCase (e.g., ID, Title, Ingredients, Name, Quantity). The frontend expects camelCase. Use responseHelpers to map:
+
+ID → id
+
+Title → title
+
+Ingredients → ingredients (map each IngredientID, Name, Quantity, Unit)
+
+Inventory items: Name, Quantity, Unit → name, quantity, unit
+
+Example mapping usage
+
+ts
+import { mapRecipeListItem, mapRecipeDetail } from "../utils/responseHelpers";
+
+const r = await api.get("/recipes");
+const recipes = (Array.isArray(r.data) ? r.data : r.data?.recipes ?? []).map(mapRecipeListItem);
+Components, routing, and state
+Routing
+
+Routes are defined in App.tsx (or main.tsx) using React Router. Ensure route element props are React elements (e.g., element={<RecipeView />}), not component references.
+
+Pages
+
+RecipeList — fetches GET /api/recipes, normalizes list items, renders titles and links to /recipes/{id}. Do not expect ingredients in list responses (they are often null).
+
+RecipeView — fetches GET /api/recipes/{id} and renders Ingredients array from the detail response. Guard rendering with recipe?.ingredients to avoid runtime errors.
+
+RecipeForm — POST /api/recipes/ expects 201 { "id": <number> }. After create, navigate to /recipes/{id} or re-fetch list.
+
+Inventory — PUT /api/inventory updates or creates items; GET /api/inventory returns an array. Re-fetch after upsert and map PascalCase fields.
+
+ShoppingLists — POST /api/shoppinglists/generate returns 201 { "id": <number> }; GET /api/shoppinglists/{id} returns { list: {...}, items: [...] }.
+
+State management
+
+Local component state is used for forms and page-level data. For cross-page caching and automatic invalidation, consider React Query:
+
+Use useQuery for lists and useMutation for writes.
+
+Call queryClient.invalidateQueries(["recipes"]) after creating a recipe.
+
+Defensive rendering
+
+Always guard values: recipe?.title ?? "Untitled", ingredients?.length ? ... : "No ingredients".
+
+Import React hooks explicitly: import React, { useEffect, useState } from "react";.
+
+Testing, build, deployment, and troubleshooting
+Testing
+
+Add unit tests for responseHelpers and page logic. Use Jest + React Testing Library for components.
+
+For E2E, use Playwright or Cypress against a running backend.
+
+Build and deploy
+
+Build with npm run build. Serve the dist/ output with any static host (Netlify, Vercel, static server behind CDN). Configure the host to rewrite unknown routes to index.html for SPA routing.
+
+Common troubleshooting
+
+White screen: open DevTools Console for the first error. Common causes: missing imports, wrong export/import (default vs named), undefined variables, or route element not a React element.
+
+Missing fields or Unnamed/0: inspect Network → Response for the endpoint and adapt responseHelpers to map the exact keys. Paste raw JSON into the helpers if needed.
+
+missing auth: ensure access_token is stored and Authorization header is sent. Check api/client.ts interceptor and login handler.
+
+Case-sensitive import errors: on Linux/macOS ensure import paths match file casing exactly.
+
+Tailwind/PostCSS errors: check postcss.config.cjs and installed versions.
+
+Quick reference snippets
+Set API base
+
+env
+# .env
+VITE_API_BASE="http://127.0.0.1:8080/api"
+Store token after login
+
+ts
+const res = await api.post("/auth/login", { email, password });
+localStorage.setItem("access_token", res.data.access_token);
+Normalize recipe detail
+
+ts
+const normalized = mapRecipeDetail(apiResponse);
+setRecipe(normalized);

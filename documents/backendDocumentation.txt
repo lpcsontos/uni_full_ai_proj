@@ -1,0 +1,210 @@
+### Overview
+A concise reference for the backend service that powers RecipeMgr. It covers purpose, high-level architecture, how to run locally, API endpoints, data model, migrations, testing, and common troubleshooting steps. Use this as the single source of truth for developers integrating with or extending the backend.
+
+---
+
+### Quick Start
+**Prerequisites**
+- **Go** 1.20 or newer installed.  
+- **MySQL** 8.0+ (local or Docker).  
+- **Docker** if you want ephemeral DBs for tests.  
+
+**Environment variables**
+- **`DATABASE_URL`** — MySQL DSN, e.g.:  
+  ```text
+  recipemgr_user:strongpassword@tcp(127.0.0.1:3306)/recipemgr?parseTime=true&multiStatements=true
+  ```
+- **`JWT_SECRET`** — secret used to sign access tokens.  
+- Optional local `.env` file supported if `godotenv` is loaded in `cmd/server/main.go`.
+
+**Run locally**
+1. Create DB and user or start Docker Compose MySQL.  
+2. Apply migrations (see Migrations section).  
+3. Start server:
+```bash
+export DATABASE_URL="recipemgr_user:strongpassword@tcp(127.0.0.1:3306)/recipemgr?parseTime=true&multiStatements=true"
+export JWT_SECRET="replace_with_secret"
+go run ./cmd/server
+```
+**Smoke test**
+```bash
+curl -i http://127.0.0.1:8080/api/recipes
+```
+
+---
+
+### Architecture and Components
+**High level**
+- **HTTP API** built with `chi` router.  
+- **Usecases** layer implements business logic and orchestrates repositories and JWT manager.  
+- **Repository** layer (`internal/repository`) implements persistence using `database/sql` and MySQL driver.  
+- **pkg/jwt** manages token creation, verification, refresh token hashing.  
+- **Models** live in `internal/model`.  
+- **Handlers** live in `internal/api` and map HTTP requests to usecases.
+
+**Key packages**
+- **`cmd/server`** — application entrypoint, wiring, config.  
+- **`internal/api`** — HTTP handlers and middleware (auth).  
+- **`internal/usecase`** — business logic, exported accessors `Repos()` and `JM()`.  
+- **`internal/repository`** — `MySQLRepository` implementation.  
+- **`pkg/jwt`** — `Manager` type with `CreateAccessToken`, `CreateRefreshToken`, `HashToken`, `VerifyAccessToken`, `RefreshExp`.  
+- **`test`** — integration tests (supports remote mode via `TEST_BASE_URL` or ephemeral mode using Testcontainers).
+
+**Auth flow**
+- **Access tokens**: short-lived JWT signed with `JWT_SECRET`.  
+- **Refresh tokens**: secure random raw token returned to client and hashed (SHA256) for DB storage. Use `Manager.HashToken` to compare.
+
+---
+
+### API Reference
+All endpoints are prefixed with `/api`. Responses are JSON. Authentication uses `Authorization: Bearer <access_token>` header for protected endpoints. Refresh token is set as an `HttpOnly` cookie by the login handler.
+
+#### Auth
+- **POST /api/auth/register**  
+  **Body**
+  ```json
+  {"email":"user@example.com","password":"pass","display_name":"Name"}
+  ```
+  **Response** `201`:
+  ```json
+  {"id": 123}
+  ```
+
+- **POST /api/auth/login**  
+  **Body**
+  ```json
+  {"email":"user@example.com","password":"pass"}
+  ```
+  **Response** `200`:
+  ```json
+  {"access_token":"<jwt>"}
+  ```
+  **Side effect**: sets `refresh_token` cookie (HttpOnly).
+
+- **POST /api/auth/refresh**  
+  **Cookie**: `refresh_token` required.  
+  **Response**: `501 Not Implemented` in demo; implement rotation in usecase/repo.
+
+#### Recipes
+- **GET /api/recipes**  
+  **Query**: `q`, `limit`, `offset` (defaults applied).  
+  **Response** `200`: list of recipes.
+
+- **POST /api/recipes/** (protected)  
+  **Body**: recipe payload with `ingredients` array.  
+  **Response** `201` with created `id`.
+
+- **GET /api/recipes/{id}**  
+  **Response** `200` recipe object or `404`.
+
+#### Inventory
+- **PUT /api/inventory** (protected)  
+  **Body**
+  ```json
+  {"name":"flour","quantity":100,"unit":"g","expiration_date":"2025-12-31"}
+  ```
+  **Response** `200` status ok.
+
+- **GET /api/inventory** (protected)  
+  **Response** `200` list of inventory items.
+
+#### Shopping Lists
+- **POST /api/shoppinglists/generate** (protected)  
+  **Body**
+  ```json
+  {"recipe_ids":[1,2],"name":"Weekly List"}
+  ```
+  **Response** `201`:
+  ```json
+  {"id": 42}
+  ```
+
+- **GET /api/shoppinglists/{id}** (protected)  
+  **Response** `200`:
+  ```json
+  {"list": {...}, "items": [{...}, {...}]}
+  ```
+  **Authorization**: only owner may fetch; returns `403` if not owner.
+
+**Error responses**
+- Standard JSON error: `{"error":"message"}`.  
+- `401` for auth failures, `403` for forbidden, `404` for not found, `500` for server errors.
+
+**Examples**
+- Register:
+```bash
+curl -X POST -H "Content-Type: application/json" -d '{"email":"a@b.com","password":"p"}' http://127.0.0.1:8080/api/auth/register
+```
+
+---
+
+### Data Model and Migrations
+**Core models**
+- **User**: `id`, `email`, `password_hash`, `display_name`.  
+- **Recipe**: `id`, `user_id`, `title`, `description`, `servings`, `prep_time_minutes`.  
+- **RecipeIngredient**: `id`, `recipe_id`, `name`, `quantity`, `unit`.  
+- **InventoryItem**: `id`, `user_id`, `name`, `quantity`, `unit`, `expiration_date`.  
+- **ShoppingList**: `id`, `user_id`, `name`, `created_at`.  
+- **ShoppingListItem**: `id`, `list_id`, `ingredient_id`, `quantity`, `unit`, `purchased`.
+
+**Migrations**
+- Migrations live in `migrations/` (e.g., `001_init.sql`). Apply with `migrate` or `mysql` client:
+```bash
+mysql -u recipemgr_user -p -h 127.0.0.1 recipemgr < migrations/001_init.sql
+```
+**Design notes**
+- Refresh tokens stored hashed (SHA256) in DB; raw token returned to client only.  
+- Use `parseTime=true` in DSN to map MySQL `DATETIME` to `time.Time`.
+
+---
+
+### Testing Deployment and Troubleshooting
+**Integration tests**
+- Tests in `test/` support two modes:
+  - **Remote mode**: set `TEST_BASE_URL` to point at a running server and run `go test ./test -v`.  
+  - **Ephemeral mode**: no `TEST_BASE_URL`; test spins up a MySQL container via Testcontainers, runs migrations, starts server subprocess, runs tests, and cleans up. Requires Docker.
+
+**Run tests**
+```bash
+# remote mode
+export TEST_BASE_URL="http://127.0.0.1:8080"
+go test ./test -v
+
+# ephemeral mode (Docker required)
+go test ./test -v
+```
+
+**CI recommendations**
+- Use ephemeral DB containers in CI.  
+- Run `go vet`, `golangci-lint`, `go test ./...`.  
+- Keep secrets out of repo; use CI secrets for `JWT_SECRET` and DB credentials.
+
+**Common issues**
+- **`DATABASE_URL not set`**: export env var or load `.env` via `godotenv.Load()` in `cmd/server/main.go`.  
+- **405 on inventory**: ensure test uses `PUT /api/inventory` (server exposes PUT).  
+- **401 on protected endpoints**: verify `Authorization` header contains valid access token and `JWT_SECRET` matches server config.  
+- **404 for shopping lists**: ensure the list ID exists and the token belongs to the owner.
+
+**Debugging tips**
+- Tail server logs; handlers log requests with method and path.  
+- Use `curl -v` to inspect headers and cookies.  
+- For DB issues, connect with `mysql` client and inspect tables: `SELECT * FROM shopping_lists LIMIT 10;`.
+
+---
+
+### Contribution and Extensibility
+**Coding conventions**
+- Keep business logic in `internal/usecase`. Handlers should be thin.  
+- Repositories return domain models from `internal/model`.  
+- Export only necessary accessors from `usecase` (`Repos()`, `JM()`).
+
+**Adding features**
+- Add repository methods first, then expose them via `Repositories` interface, implement in `MySQLRepository`, add usecase logic, and finally add handler and route.  
+- Add migrations for schema changes and include rollback if needed.
+
+**Security**
+- Keep `JWT_SECRET` secret and rotate periodically.  
+- Use HTTPS in production and set secure cookie flags for refresh tokens.  
+- Limit DB user privileges to the application schema.
+
+---

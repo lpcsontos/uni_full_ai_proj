@@ -1,0 +1,129 @@
+
+Témaválasztás
+
+    A projekt egy webes recept- és bevásárlólista-kezelő rendszer, amely felhasználóközpontú módon segíti receptek felvitelét, keresését és bevásárlólista generálását.
+    A rendszer lehetővé teszi regisztrációt és bejelentkezést, egyedi felhasználói fiókokkal és hitelesített API hozzáféréssel.
+    Felhasználók receptet vihetnek fel strukturált formában összetevőkkel, mennyiségekkel és elkészítési lépésekkel.
+    A felhasználó meglévő alapanyagkészletét rögzítheti, amely alapján a rendszer képes hiányzó tételeket listázni vagy bevásárlólistát generálni.
+    Egy recepthez automatikusan előállítható bevásárlólista, amely optimalizálja mennyiségeket és egyesíti az ismétlődő összetevőket.
+    A frontend React, a backend Go, az adatbázis MySQL; a felhasználói és receptadatok REST API-n keresztül érhetők el.
+    A fejlesztés során MI eszközöket alkalmazunk a specifikáció segítésére, kód-generálásra és dokumentáció előállítására; ezek használatát a readme.md dokumentálja.
+    A rendszer egyszerű, reszponzív felhasználói felülettel rendelkezik, amely asztali böngészőben használható (mobilon is tervezett a használata, de ez változhat).
+    Az alkalmazás célja a háztartási főzés megkönnyítése: gyors recept-keresés, készlet-alapú tervezés és bevásárlási költségcsökkentés.
+
+Specifikáció
+
+Rövid leírás
+
+    Ez a rendszer lehetővé teszi felhasználók számára receptek felvitelét, keresését, személyes alapanyagkészlet vezetését és bevásárlólisták automatikus generálását a meglévő készletek figyelembevételével.
+
+Célok
+
+    Gyors, megbízható receptkezelés és bevásárlólista-generálás.
+    API-készlet biztosítása harmadik féltől érkező frontendhez vagy mobil alkalmazásokhoz.
+    MI eszközök dokumentált alkalmazása a fejlesztés minden kritikus részében.
+
+Célcsoport
+
+    Otthoni főzők, háztartások, illetve bárki, aki rendszerezni szeretné receptjeit és hatékonyan tervezni bevásárlásait.
+
+Korlátozások
+
+    Egyfajos jogosultsági modell: regisztrált felhasználó; nincs adminisztrátori CMS a scope-on belül.
+    Nem tartozik ide fizetési integráció, bolt-szinkronizáció vagy üzlet-specifikus ár optimalizáció.
+
+ 
+
+Funkcionális követelmények
+
+Felhasználói fiókok
+
+    Regisztráció: email, jelszó (bcrypt), opcionális felhasználónév.
+    Bejelentkezés: JWT alapú token kibocsátás, token frissítés endpoint.
+    Profil: alapadatok szerkesztése, sütik és preferenciák.
+
+Receptek kezelése
+
+    Recept létrehozás: cím, leírás, előkészítési idő, adagok száma, lépések (sorrend), összetevők (név, mennyiség, egység).
+    Recept szerkesztés és törlés: csak a létrehozó jogosult.
+    Recept keresés: kulcsszavas és összetevő alapú szűrés; cím, összetevő, idő és kategória szerint rendezés.
+
+Alapanyagkészlet
+
+    Készlet rögzítése: tételnév, mennyiség, egység, lejárat opció.
+    Készlet frissítés: automatikus csökkentés bevásárlás vagy recept felhasználás után.
+
+Bevásárlólista
+
+    Automatikus generálás: egy vagy több recept kiválasztásából; a meglévő készlet alapján hiányzó mennyiségek kiszámolása.
+    Manuális lista szerkesztés: tételek hozzáadása, mennyiség módosítása, megjelölés megvásároltként.
+    Egyesítés és normalizálás: azonos összetevőket összevonja, egység-konverzió egyszerű esetekben (pl. g ↔ kg).
+
+API és integráció
+
+    REST API végpontok JSON használatával.
+    Dokumentáció OpenAPI/Swagger formátumban.
+
+ 
+
+Nem-funkcionális követelmények
+
+Teljesítmény
+
+    Közepes terhelésre méretezve; tipikus válaszidő < 300 ms egyszerű lekérdezéseknél.
+
+Biztonság
+
+    Titkosított jelszótárolás, JWT exp és refresh token kezeléssel.
+    Input validáció és SQL injekció elleni védelem paraméterezett lekérdezésekkel.
+    HTTPS kötelező a bemutató környezetben.
+
+Adatvédelem
+
+    Felhasználói adatok törlésének lehetősége
+
+ 
+
+Architektúra és technológiák
+
+Backend
+
+    Golang, moduláris rétegelt architektúra: router (chi vagy gorilla/mux), szolgáltatási réteg, repository réteg, MySQL driver (database/sql + driver) és migráció (migrate).
+    JWT auth middleware, input validáció (validator csomag).
+
+Frontend
+
+    React (Vite vagy Create React App), TypeScript ajánlott.
+    Állapotkezelés: React Context vagy Redux minimalista használattal.
+    Reszponzív UI: Tailwind CSS vagy egy kisebb komponens könyvtár.
+
+Adatbázis
+
+    MySQL 8, migrációs scriptek, indexelés receptek és összetevők gyors kereséséhez.
+
+Adatmodell vázlat
+
+    users: id; email; password_hash; display_name; created_at; updated_at
+    recipes: id; user_id; title; description; servings; prep_time_minutes; created_at; updated_at
+    ingredients: id; name (normalizált)
+    recipe_ingredients: id; recipe_id; ingredient_id; quantity; unit
+    inventory_items: id; user_id; ingredient_id; quantity; unit; expiration_date
+    shopping_lists: id; user_id; name; created_at
+    shopping_list_items: id; list_id; ingredient_id; quantity; unit; purchased_boolean
+
+Adatintegritás
+
+    Kulcsok és idegen kulcsok, tranzakciók a készlet-frissítésekhez.
+
+API főbb végpontok
+
+    POST /api/auth/register — regisztráció
+    POST /api/auth/login — bejelentkezés, JWT visszaadása
+    GET /api/recipes — recept lista és keresés
+    POST /api/recipes — recept létrehozás
+    GET /api/recipes/{id} — recept részletek
+    PUT /api/recipes/{id} — szerkesztés (auth, tulajdonos ellenőrzés)
+    PUT /api/inventory — készlet frissítése
+    POST /api/shoppinglists/generate — bevásárlólista generálása recept(ek) alapján
+    GET /api/shoppinglists  — bevásárlólisták elérése
+    GET /api/shoppinglists/{id} — bevásárlólista elérése

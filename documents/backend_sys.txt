@@ -1,0 +1,23 @@
+.
+├─ cmd/
+│  └─ server/
+│     └─ main.go
+├─ internal/
+│  ├─ auth/
+│  │  ├─ api/
+│  │  ├─ usecase/
+│  │  ├─ repo/
+│  │  └─ model/
+│  ├─ recipes/
+│  ├─ inventory/
+│  └─ shoppinglists/
+├─ pkg/
+│  ├─ jwt/
+│  ├─ logger/
+│  ├─ validator/
+│  └─ unitconv/
+├─ migrations/
+├─ deploy/
+├─ scripts/
+├─ docs/
+└─ go.mod
